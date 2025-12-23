@@ -9,6 +9,7 @@
 /bootstrap/cache/*
 /.env
 /.env.*.local
+/.env.docker
 /.DS_Store
 /Thumbs.db
 /.editorconfig
@@ -21,3 +22,5 @@
 /dist
 /build
 *.log
+/node_modules
+/public/build

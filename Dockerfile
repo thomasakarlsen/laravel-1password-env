@@ -37,8 +37,11 @@ COPY --chown=www-data:www-data . /var/www/html
 COPY --chown=www-data:www-data docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Build frontend assets
-RUN npm run build
+# Install PHP dependencies
+RUN composer install --no-dev --optimize-autoloader
+
+# Install Node dependencies and build frontend assets
+RUN npm ci && npm run build
 
 EXPOSE 8000
 
