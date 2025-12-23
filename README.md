@@ -1,58 +1,124 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# 1Password Environment Secrets with Laravel Octane & Docker
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A technical demonstration of how to use the **1Password CLI** to securely inject environment secrets into Docker containers running Laravel Octane with FrankenPHP.
 
-## About Laravel
+## What This Project Demonstrates
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+This project showcases a production-ready approach to managing secrets in containerized Laravel applications:
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- **1Password CLI Integration**: Uses Service Account tokens to fetch secrets from 1Password
+- **Secure Secret Injection**: Secrets are injected at runtime via `op run`, not stored in images or `.env` files
+- **Laravel Octane**: High-performance PHP application server running on FrankenPHP
+- **Docker Best Practices**: Multi-stage builds, non-root user execution, proper cleanup
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Architecture
 
-## Learning Laravel
+```
+Docker Container
+├── 1Password CLI (installed)
+├── Service Account Token
+└── Entrypoint Script
+    ├── Reads OP_ITEM from 1Password vault
+    ├── Parses JSON with jq
+    └── Injects secrets via `op run --env-file`
+         └── Launches Laravel Octane
+```
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+## Prerequisites
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- Docker & Docker Compose
+- A 1Password account with vault access
+- Service Account Token from 1Password
 
-## Laravel Sponsors
+## Getting Started
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+### 1. Clone the Repository
 
-### Premium Partners
+```bash
+git clone https://github.com/thomasakarlsen/1password-env-example.git
+cd 1password-env-example
+```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+### 2. Set Up 1Password
 
-## Contributing
+1. Create a vault (or use an existing one)
+2. Create an item with your secrets (can be named anything, e.g., `environment`):
+   - `APP_NAME`: Laravel with 1Password
+   - `APP_ENV`: Environment name (e.g., `production`)
+   - `APP_DEBUG`: Debug mode (true/false)
+   - `SESSION_DRIVER`: file
+   - `MY_VALUE`: `SecretValueFrom1Password` (required for test verification)
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+3. Create a Service Account:
+   - Go to **Settings** → **Developers** → **Service Accounts**
+   - Create a new Service Account with access to your vault
+   - Copy the generated token (starts with `ops_`)
 
-## Code of Conduct
+### 3. Configure `.env.docker`
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Copy the example and add your credentials:
 
-## Security Vulnerabilities
+```bash
+cp .env.docker.example .env.docker
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Edit `.env.docker`:
+
+```dotenv
+OP_SERVICE_ACCOUNT_TOKEN=ops_your_token_here
+OP_ITEM=your_item_name
+OP_VAULT=your_vault_name
+```
+
+### 4. Build and Run
+
+```bash
+docker compose up
+```
+
+After everything is loaded you should see the octane server running successfully, and the output of the environment test command.
+
+### 5. Access the Application
+
+Open your browser and navigate to: **http://localhost:8000**
+
+You should see a welcome page with environment variables loaded from 1Password.
+
+### 6. Verify Environment Loading
+
+Run the test command to verify secrets are loaded:
+
+```bash
+docker compose run --rm test
+```
+
+Expected output:
+```
+=== Environment Variables Loaded ===
+MY_VALUE: <concealed by 1Password>
+APP_ENV: <concealed by 1Password>
+APP_DEBUG: 1
+=====================================
+
+✓ Value is CORRECT
+```
+
+## Key Files
+
+- **Dockerfile**: Installs 1Password CLI, Node.js, and builds the application
+- **docker/entrypoint.sh**: Handles secret injection via 1Password
+- **.env.docker.example**: Template showing required environment variables
+- **app/Console/Commands/TestEnv.php**: Demo command to verify environment loading
+
+## How Secrets Are Injected
+
+1. Container starts with `OP_SERVICE_ACCOUNT_TOKEN`, `OP_ITEM`, and `OP_VAULT` environment variables
+2. Entrypoint script runs:
+   ```bash
+   op item get "$OP_ITEM" --vault "$OP_VAULT" --format json | jq -r '.fields[] | "\(.label)=\(.reference)"'
+   ```
+3. Output is piped to `op run --env-file /dev/stdin -- php artisan octane:frankenphp`
+4. Secrets are injected into the Laravel application runtime
 
 ## License
 
