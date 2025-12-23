@@ -120,6 +120,54 @@ APP_DEBUG: 1
 3. Output is piped to `op run --env-file /dev/stdin -- php artisan octane:frankenphp`
 4. Secrets are injected into the Laravel application runtime
 
+## Alternative Approaches: `op run` vs Direct Injection
+
+This demo uses **`op run`** for secret injection, which automatically redacts secret values from all output (logs, error messages, etc.). However, there's an important consideration:
+
+### Current Approach: `op run --env-file`
+
+**Pros:**
+- Automatic redaction of secrets from all output
+- Secrets never exist on disk or in shell history
+- Cleaner logs without sensitive values
+
+**Cons:**
+- Laravel environments contain many common words (e.g., `connection`, `driver`, `cache`, `session`)
+- 1Password CLI may accidentally redact legitimate log output containing these words
+- Can make debugging difficult when common terms in error messages are concealed
+
+### Alternative: Direct Environment Variable Injection
+
+For applications like Laravel with large `.env` files, you might prefer direct injection:
+
+```bash
+eval "$(op item get "$OP_ITEM" --vault "$OP_VAULT" --format json | jq -r '.fields[] | "\(.label)=\(.value)"')"
+exec php artisan octane:frankenphp
+```
+
+**Pros:**
+- No automatic redaction means clearer logs
+- Better for debugging with full error messages
+- Simpler approach
+
+**Cons:**
+- Secrets appear in logs and output
+- Requires more careful secret management
+- Secrets are visible in process list briefly
+
+### Alternative: Generate `.env` File
+
+Write secrets to Laravel's `.env` file:
+
+```bash
+op item get "$OP_ITEM" --vault "$OP_VAULT" --format json | \
+  jq -r '.fields[] | "\(.label)=\(.value)"' > /var/www/html/.env
+exec php artisan octane:frankenphp
+```
+
+**Cons:**
+- Secrets acessible as a file in running container
+
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
